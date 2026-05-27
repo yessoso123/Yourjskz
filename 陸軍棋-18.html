@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>陸軍棋 Land Battle Chess</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow-x: hidden; }
+body {
+  font-family: "Noto Serif TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", serif;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(180,140,90,.25), transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(120,40,30,.25), transparent 60%),
+    linear-gradient(160deg, #e8d9b5 0%, #d4b483 40%, #b8946a 100%);
+  background-attachment: fixed;
+  color: #2a1810;
+  min-height: 100vh;
+  padding: 12px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2' seed='5'/><feColorMatrix values='0 0 0 0 .2 0 0 0 0 .15 0 0 0 0 .1 0 0 0 .08 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+  opacity: .6; mix-blend-mode: multiply;
+}
+.screen { max-width: 480px; margin: 0 auto; }
+h1 { font-size: 2.5em; text-align: center; color: #8b0000; letter-spacing: .3em; padding: .2em 0; text-shadow: 2px 2px 0 rgba(0,0,0,.1); }
+h1::before, h1::after { content: "❖"; margin: 0 .3em; color: #d4a017; font-size: .7em; vertical-align: middle; }
+h2 { font-size: 1.4em; text-align: center; margin: 1em 0 .5em; color: #5a2a1a; letter-spacing: .15em; }
+
+/* Menu */
+#menu { padding-top: 5vh; }
+.subtitle { text-align: center; color: #6b4423; letter-spacing: .2em; margin-bottom: 2em; font-style: italic; }
+.btn-group { display: flex; flex-direction: column; gap: 12px; padding: 0 8px; }
+.btn {
+  font-family: inherit; font-size: 1.1em; padding: 14px 20px;
+  background: linear-gradient(180deg, #f5e6c8 0%, #d9b88a 100%);
+  border: 2px solid #5a2a1a;
+  color: #2a1810; cursor: pointer; letter-spacing: .15em;
+  box-shadow: 0 3px 0 #5a2a1a, 0 5px 12px rgba(0,0,0,.2);
+  transition: all .12s;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 0 0 #5a2a1a, 0 2px 5px rgba(0,0,0,.2); }
+.btn.primary { background: linear-gradient(180deg, #c93030 0%, #8b0000 100%); color: #fff5e1; border-color: #2a0000; box-shadow: 0 3px 0 #2a0000, 0 5px 12px rgba(0,0,0,.3); }
+.btn.primary:active { box-shadow: 0 0 0 #2a0000, 0 2px 5px rgba(0,0,0,.3); }
+.btn small { display:block; font-size: .75em; opacity:.75; letter-spacing: .05em; margin-top:4px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Board */
+#boardWrap, #gameBoardWrap { position: relative; width: min(95vw, 380px); margin: 0 auto; aspect-ratio: 5 / 12; }
+#boardSvg, #gameBoardSvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#boardGrid, #gameBoardGrid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(12, 1fr); gap: 0; padding: 2%; }
+.cell {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.cell-inner {
+  width: 86%; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(10px, 2.6vw, 14px); font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.05; text-align: center;
+  border: 1.5px solid #8b0000; background: #fff5e1;
+  position: relative; transition: transform .1s, box-shadow .1s;
+}
+.cell.station .cell-inner { border-radius: 2px; }
+.cell.camp .cell-inner {
+  border-radius: 50%; background: rgba(255,245,225,.35); border-style: dashed;
+}
+.cell.camp .cell-inner::before { content: "行營"; color: #8b0000; opacity: .55; font-size: .9em; }
+.cell.hq .cell-inner { border-radius: 50%; border-width: 2.5px; background: #fff5e1; }
+.cell.hq .cell-inner::before { content: "大本營"; color: #8b0000; opacity: .55; font-size: .75em; writing-mode: vertical-rl; }
+.cell.front .cell-inner { background: #f5e6c8; }
+.cell.empty .cell-inner { background: transparent; border: none; }
+
+/* Pieces */
+.piece {
+  position: absolute; inset: 7%; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; letter-spacing: -.05em; line-height: 1;
+  font-size: clamp(11px, 3vw, 16px);
+  border: 1.5px solid; cursor: pointer; z-index: 2;
+  box-shadow: 0 2px 3px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.3);
+  transition: transform .15s, box-shadow .15s;
+  writing-mode: vertical-rl; text-orientation: upright;
+}
+.piece.red { background: linear-gradient(160deg, #fff5e1 0%, #f0d9a8 100%); color: #8b0000; border-color: #8b0000; }
+.piece.black { background: linear-gradient(160deg, #fff5e1 0%, #d9c4a0 100%); color: #1a1a1a; border-color: #1a1a1a; }
+.piece.hidden { font-size: 1.6em; writing-mode: horizontal-tb; }
+.piece.hidden.red::before { content: "❖"; }
+.piece.hidden.black::before { content: "❖"; }
+.piece.selected { transform: scale(1.08); box-shadow: 0 0 0 3px #d4a017, 0 4px 8px rgba(0,0,0,.4); z-index: 5; }
+.piece.combat { animation: shake .4s; }
+@keyframes shake { 0%,100%{transform: translateX(0)} 25%{transform: translateX(-3px) rotate(-3deg)} 75%{transform: translateX(3px) rotate(3deg)} }
+
+.move-hint {
+  position: absolute; inset: 25%; border-radius: 50%;
+  background: rgba(212,160,23,.5); border: 2px solid #d4a017;
+  pointer-events: none; z-index: 1;
+  animation: pulse 1.2s infinite;
+}
+.move-hint.attack { inset: 5%; background: rgba(180,30,30,.35); border-color: #b41e1e; border-width: 3px; }
+@keyframes pulse { 0%,100% { opacity:.7 } 50% { opacity: 1 } }
+
+/* Game UI */
+#topBar, #bottomBar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; margin: 8px auto; max-width: 380px;
+  background: rgba(255,245,225,.5); border: 1.5px solid #8b0000;
+  border-radius: 2px; font-size: .9em;
+}
+.status { font-weight: 700; color: #8b0000; letter-spacing: .1em; }
+.turn-indicator { display: inline-block; padding: 4px 12px; border-radius: 2px; }
+.turn-indicator.player { background: #8b0000; color: #fff5e1; }
+.turn-indicator.ai { background: #1a1a1a; color: #fff5e1; }
+
+#log {
+  max-width: 380px; margin: 8px auto; max-height: 90px; overflow-y: auto;
+  background: rgba(0,0,0,.05); border-left: 3px solid #8b0000;
+  padding: 6px 10px; font-size: .82em; line-height: 1.6;
+}
+#log p { margin: 2px 0; }
+#log .combat { color: #8b0000; font-weight: 700; }
+#log .ai-move { color: #444; }
+#log .player-move { color: #2a1810; }
+
+/* Setup */
+#setupPool {
+  max-width: 380px; margin: 10px auto;
+  background: rgba(255,245,225,.7); border: 1.5px solid #8b0000;
+  padding: 8px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+}
+.pool-piece {
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(160deg, #fff5e1, #f0d9a8);
+  color: #8b0000; border: 1.5px solid #8b0000; font-weight: 800;
+  font-size: 11px; letter-spacing: -.05em; cursor: pointer;
+  writing-mode: vertical-rl; text-orientation: upright;
+  position: relative;
+}
+.pool-piece .count {
+  position: absolute; top: -4px; right: -4px;
+  background: #d4a017; color: #2a1810; font-size: 9px;
+  width: 14px; height: 14px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  writing-mode: horizontal-tb;
+  border: 1px solid #5a2a1a;
+}
+.pool-piece.selected { box-shadow: 0 0 0 2px #d4a017; }
+.pool-piece.depleted { opacity: .3; pointer-events: none; }
+
+.setup-controls { display: flex; gap: 6px; justify-content: center; margin: 8px auto; max-width: 380px; flex-wrap: wrap; padding: 0 8px; }
+.setup-controls .btn { padding: 8px 14px; font-size: .9em; flex: 1; min-width: 0; }
+
+/* Modal */
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(20,10,5,.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+.modal-content {
+  background: linear-gradient(180deg, #f5e6c8 0%, #d9b88a 100%);
+  border: 3px solid #8b0000; padding: 30px 25px; max-width: 360px; width: 100%;
+  text-align: center; box-shadow: 0 0 0 1px #d4a017 inset, 0 10px 30px rgba(0,0,0,.5);
+}
+.modal-content h2 { font-size: 1.8em; margin-bottom: 12px; }
+.modal-content p { margin-bottom: 20px; color: #5a2a1a; line-height: 1.6; }
+.modal-content.win h2 { color: #b8860b; }
+.modal-content.lose h2 { color: #2a1810; }
+
+.hidden-screen { display: none !important; }
+
+/* Decorative seal */
+.seal {
+  display: inline-block; width: 60px; height: 60px;
+  background: #8b0000; color: #fff5e1;
+  border: 2px solid #2a0000; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .9em; letter-spacing: -.05em; line-height: 1; font-weight: 800;
+  margin: 0 auto 20px; padding: 8px;
+  writing-mode: vertical-rl; text-orientation: upright;
+  transform: rotate(-3deg);
+  box-shadow: 0 3px 8px rgba(0,0,0,.3);
+}
+
+/* Rules */
+#rules { max-width: 380px; margin: 0 auto; padding: 10px; font-size: .85em; line-height: 1.7; }
+#rules h3 { color: #8b0000; margin-top: 10px; letter-spacing: .1em; }
+#rules ul { padding-left: 20px; }
+#rules li { margin: 3px 0; }
+.rule-btn { text-align:center; margin-top: 16px; font-size: .85em; color: #6b4423; text-decoration: underline; cursor: pointer; }
+
+/* Mobile responsive */
+@media (max-width: 360px) {
+  .cell-inner, .piece { font-size: 10px; }
+  .pool-piece { width: 34px; height: 34px; font-size: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- MENU SCREEN -->
+<div id="menu" class="screen">
+  <div class="seal">陸軍棋</div>
+  <h1>陸軍棋</h1>
+  <p class="subtitle">Land Battle Chess · 軍棋對奕</p>
+
+  <h2>選擇電腦難度</h2>
+  <div class="btn-group">
+    <button class="btn" data-level="easy">簡 單<small>新手練習・電腦隨機應戰</small></button>
+    <button class="btn" data-level="hard">困 難<small>進階對手・會評估局勢主動進攻</small></button>
+    <button class="btn primary" data-level="cold">冷 酷<small>頂尖對手・記憶推理・佈局精準</small></button>
+  </div>
+  <div class="rule-btn" onclick="document.getElementById('rulesModal').classList.remove('hidden-screen')">遊戲規則說明</div>
+</div>
+
+<!-- SETUP SCREEN -->
+<div id="setup" class="screen hidden-screen">
+  <h2 id="setupTitle">佈陣階段</h2>
+  <div id="setupHint" style="text-align:center;font-size:.85em;color:#5a2a1a;margin-bottom:8px;letter-spacing:.05em">點選下方棋子，再點空格放置</div>
+  <div id="boardWrap"><svg id="boardSvg"></svg><div id="boardGrid"></div></div>
+  <div id="setupPool"></div>
+  <div class="setup-controls">
+    <button class="btn" id="btnRandom">隨機佈局</button>
+    <button class="btn" id="btnClear">清 空</button>
+    <button class="btn primary" id="btnStartGame" disabled>開始對戰</button>
+  </div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="game" class="screen hidden-screen">
+  <div id="topBar">
+    <span class="status">難度：<span id="diffLabel"></span></span>
+    <span><span class="turn-indicator" id="turnInd">玩家</span></span>
+  </div>
+  <div id="gameBoardWrap"><svg id="gameBoardSvg"></svg><div id="gameBoardGrid"></div></div>
+  <div id="log"></div>
+  <div class="setup-controls">
+    <button class="btn" id="btnSurrender">投 降</button>
+    <button class="btn" id="btnNewGame">新 局</button>
+  </div>
+</div>
+
+<!-- END MODAL -->
+<div id="endModal" class="modal hidden-screen">
+  <div class="modal-content" id="endContent">
+    <h2 id="endTitle"></h2>
+    <p id="endMsg"></p>
+    <button class="btn primary" onclick="newGame()">再 戰</button>
+  </div>
+</div>
+
+<!-- RULES MODAL -->
+<div id="rulesModal" class="modal hidden-screen">
+  <div class="modal-content" style="text-align:left;max-height:85vh;overflow-y:auto">
+    <h2 style="text-align:center">遊戲規則</h2>
+    <div id="rules">
+      <h3>勝利條件</h3>
+      <ul><li>奪取對方<b>軍旗</b>即勝</li><li>對方無棋可動亦勝</li></ul>
+      <h3>棋子階級（高 → 低）</h3>
+      <ul><li>司令 ＞ 軍長 ＞ 師長 ＞ 旅長 ＞ 團長 ＞ 營長 ＞ 連長 ＞ 排長 ＞ 工兵</li><li>同階級碰撞兩者皆陣亡</li></ul>
+      <h3>特殊棋子</h3>
+      <ul>
+        <li><b>軍旗</b>：放於大本營，不可移動</li>
+        <li><b>地雷</b>：不可移動，遇工兵被拆，遇其他棋同歸於盡</li>
+        <li><b>炸彈</b>：遇任何棋子皆同歸於盡</li>
+        <li><b>工兵</b>：可拆地雷；在鐵路上可任意轉彎</li>
+      </ul>
+      <h3>移動規則</h3>
+      <ul>
+        <li>一般道路：每回合走一格</li>
+        <li>鐵路（紅色粗線）：可沿直線走多格</li>
+        <li>工兵在鐵路上可拐彎</li>
+        <li>不可進入己方大本營</li>
+        <li>行營內的棋子不可被攻擊</li>
+      </ul>
+      <h3>佈陣限制</h3>
+      <ul>
+        <li>軍旗只能放在大本營</li>
+        <li>地雷只能放在最後兩排</li>
+        <li>炸彈不能放在第一排（前線）</li>
+        <li>行營不能放棋子</li>
+      </ul>
+    </div>
+    <button class="btn primary" style="margin-top:15px" onclick="document.getElementById('rulesModal').classList.add('hidden-screen')">了 解</button>
+  </div>
+</div>
+
+<script>
+// ============== CONSTANTS ==============
+const ROWS = 12, COLS = 5;
+const HUMAN = 'h', AI = 'a';
+
+const PIECE_DEFS = {
+  FLAG:       { rank: 0,  count: 1, name: '軍旗', val: 1000 },
+  COMMANDER:  { rank: 9,  count: 1, name: '司令', val: 90 },
+  GENERAL:    { rank: 8,  count: 1, name: '軍長', val: 75 },
+  DIVISION:   { rank: 7,  count: 2, name: '師長', val: 50 },
+  BRIGADIER:  { rank: 6,  count: 2, name: '旅長', val: 35 },
+  COLONEL:    { rank: 5,  count: 2, name: '團長', val: 25 },
+  MAJOR:      { rank: 4,  count: 2, name: '營長', val: 18 },
+  CAPTAIN:    { rank: 3,  count: 3, name: '連長', val: 12 },
+  LIEUTENANT: { rank: 2,  count: 3, name: '排長', val: 8  },
+  ENGINEER:   { rank: 1,  count: 3, name: '工兵', val: 15 },
+  BOMB:       { rank: -1, count: 2, name: '炸彈', val: 30 },
+  MINE:       { rank: -2, count: 3, name: '地雷', val: 20 }
+};
+
+// Cell types
+function cellType(r, c) {
+  if ((r === 0 || r === 11) && (c === 1 || c === 3)) return 'hq';
+  const camps = [[1,1],[1,3],[2,2],[3,1],[3,3],[8,1],[8,3],[9,2],[10,1],[10,3]];
+  if (camps.some(x => x[0]===r && x[1]===c)) return 'camp';
+  return 'station';
+}
+
+const CAMPS = [[1,1],[1,3],[2,2],[3,1],[3,3],[8,1],[8,3],[9,2],[10,1],[10,3]];
+
+// Railway cells (perimeter of each side's inner area plus front lines)
+const RAILWAY = new Set();
+[1,5,6,10].forEach(r => { for (let c=0;c<5;c++) RAILWAY.add(r+','+c); });
+[2,3,4,7,8,9].forEach(r => { RAILWAY.add(r+',0'); RAILWAY.add(r+',4'); });
+
+function isRailway(r,c) { return RAILWAY.has(r+','+c); }
+
+// ============== ADJACENCY ==============
+// Road adjacency: orthogonal within same side + camp diagonals + front-line crossings
+function getRoadNeighbors(r, c) {
+  const result = [];
+  const sameSide = (r1, r2) => (r1 <= 5) === (r2 <= 5);
+
+  // Orthogonal (within same side, except front-line crossings)
+  const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+  for (const [dr, dc] of dirs) {
+    const nr = r + dr, nc = c + dc;
+    if (nr<0||nr>11||nc<0||nc>4) continue;
+    // Same side or front-line crossing
+    if (sameSide(r, nr)) result.push([nr, nc]);
+    // Front line crossings at cols 0, 2, 4 (between row 5 and row 6)
+    else if ((r === 5 && nr === 6) || (r === 6 && nr === 5)) {
+      if (c === 0 || c === 2 || c === 4) result.push([nr, nc]);
+    }
+  }
+
+  // Diagonal connections via camps
+  // If we are adjacent to a camp (orthogonally diagonal), check
+  for (const [cr, cc] of CAMPS) {
+    if (Math.abs(cr-r)===1 && Math.abs(cc-c)===1 && sameSide(r, cr)) {
+      // diagonal connection
+      result.push([cr, cc]);
+    }
+  }
+  // If we ARE a camp, connect diagonally
+  if (cellType(r, c) === 'camp') {
+    for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+      const nr = r+dr, nc = c+dc;
+      if (nr>=0 && nr<=11 && nc>=0 && nc<=4 && sameSide(r, nr)) {
+        result.push([nr, nc]);
+      }
+    }
+  }
+
+  // Dedupe
+  const seen = new Set();
+  return result.filter(([nr,nc]) => {
+    const k = nr+','+nc;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+// Railway straight-line moves from (r,c)
+function getRailwayMoves(r, c, board, isEngineer) {
+  if (!isRailway(r,c)) return [];
+  const moves = new Set();
+
+  if (isEngineer) {
+    // BFS on railway cells
+    const queue = [[r,c]];
+    const visited = new Set([r+','+c]);
+    while (queue.length) {
+      const [cr, cc] = queue.shift();
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        // Move along railway
+        const nr = cr+dr, nc = cc+dc;
+        if (!isRailwayConnected(cr, cc, nr, nc)) continue;
+        const k = nr+','+nc;
+        if (visited.has(k)) continue;
+        visited.add(k);
+        if (board[nr][nc]) {
+          // can capture; cannot pass through
+          if (board[nr][nc].side !== board[r][c].side) moves.add(k);
+        } else {
+          moves.add(k);
+          queue.push([nr, nc]);
+        }
+      }
+    }
+  } else {
+    // Straight line in 4 directions
+    for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      let cr = r, cc = c;
+      while (true) {
+        const nr = cr+dr, nc = cc+dc;
+        if (!isRailwayConnected(cr, cc, nr, nc)) break;
+        if (board[nr][nc]) {
+          if (board[nr][nc].side !== board[r][c].side) moves.add(nr+','+nc);
+          break;
+        }
+        moves.add(nr+','+nc);
+        cr = nr; cc = nc;
+      }
+    }
+  }
+
+  return [...moves].map(s => s.split(',').map(Number));
+}
+
+function isRailwayConnected(r1, c1, r2, c2) {
+  if (r2<0||r2>11||c2<0||c2>4) return false;
+  if (!isRailway(r1,c1) || !isRailway(r2,c2)) return false;
+  // Must be orthogonally adjacent
+  if (Math.abs(r1-r2)+Math.abs(c1-c2) !== 1) return false;
+  // Cross-side railway only at cols 0 and 4 between row 5-6
+  if ((r1===5 && r2===6) || (r1===6 && r2===5)) {
+    return c1 === 0 || c1 === 4;
+  }
+  return true;
+}
+
+// ============== GAME STATE ==============
+let G = {
+  board: null,       // 12x5 array of pieces or null
+  turn: HUMAN,       // whose turn
+  level: 'easy',
+  phase: 'menu',     // menu | setup | play | end
+  selected: null,    // {r, c}
+  legalMoves: [],
+  poolPiece: null,   // piece type selected in setup
+  aiKnowledge: null, // AI's belief about human pieces
+  moveHistory: [],
+  noProgressTurns: 0,
+};
+
+function newBoard() {
+  return Array.from({length: ROWS}, () => Array(COLS).fill(null));
+}
+
+function makePiece(type, side) {
+  const def = PIECE_DEFS[type];
+  return { type, side, name: def.name, rank: def.rank, val: def.val, revealed: false, moved: false, lastMove: null };
+}
+
+// ============== LEGAL MOVES ==============
+function getLegalMoves(r, c) {
+  const p = G.board[r][c];
+  if (!p) return [];
+  // Immovable
+  if (p.type === 'FLAG' || p.type === 'MINE') return [];
+
+  let moves = [];
+
+  // Road moves (1 step)
+  for (const [nr, nc] of getRoadNeighbors(r, c)) {
+    if (!canMoveTo(p, nr, nc)) continue;
+    moves.push([nr, nc]);
+  }
+
+  // Railway moves
+  const railMoves = getRailwayMoves(r, c, G.board, p.type === 'ENGINEER');
+  for (const [nr, nc] of railMoves) {
+    if (!canMoveTo(p, nr, nc)) continue;
+    if (!moves.some(m => m[0]===nr && m[1]===nc)) moves.push([nr, nc]);
+  }
+
+  return moves;
+}
+
+function canMoveTo(piece, r, c) {
+  // Cannot enter own HQ
+  const ct = cellType(r, c);
+  const isOwnHQ = ct === 'hq' && ((piece.side === HUMAN && r === 11) || (piece.side === AI && r === 0));
+  if (isOwnHQ) return false;
+  const target = G.board[r][c];
+  if (!target) return true;
+  // Same side - blocked
+  if (target.side === piece.side) return false;
+  // Cannot attack in camp
+  if (ct === 'camp') return false;
+  return true;
+}
+
+// ============== COMBAT ==============
+function resolveCombat(attacker, defender) {
+  // Returns: 'attacker' | 'defender' | 'both'
+  if (defender.type === 'FLAG') return 'attacker';
+  if (attacker.type === 'BOMB' || defender.type === 'BOMB') return 'both';
+  if (defender.type === 'MINE') {
+    if (attacker.type === 'ENGINEER') return 'attacker';
+    return 'both';
+  }
+  if (attacker.rank > defender.rank) return 'attacker';
+  if (attacker.rank < defender.rank) return 'defender';
+  return 'both';
+}
+
+// ============== RENDERING ==============
+function renderBoard(containerId, svgId, interactive) {
+  const grid = document.getElementById(containerId);
+  const svg = document.getElementById(svgId);
+  grid.innerHTML = '';
+
+  // Draw lines first
+  drawBoardLines(svg);
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell ' + cellType(r, c);
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      // Mark front-line rows
+      if (r === 5 || r === 6) cell.classList.add('front');
+
+      const inner = document.createElement('div');
+      inner.className = 'cell-inner';
+      cell.appendChild(inner);
+
+      // Piece
+      const p = G.board[r][c];
+      if (p) {
+        const pieceEl = document.createElement('div');
+        const showFace = p.side === HUMAN || p.revealed || G.phase === 'setup' || G.phase === 'end';
+        pieceEl.className = 'piece ' + (p.side === HUMAN ? 'red' : 'black');
+        if (!showFace) pieceEl.classList.add('hidden');
+        else pieceEl.textContent = p.name;
+        pieceEl.dataset.r = r;
+        pieceEl.dataset.c = c;
+        cell.appendChild(pieceEl);
+      }
+
+      // Move hint
+      if (G.legalMoves.some(m => m[0]===r && m[1]===c)) {
+        const hint = document.createElement('div');
+        const hasEnemy = G.board[r][c] && G.board[r][c].side !== G.board[G.selected.r][G.selected.c].side;
+        hint.className = 'move-hint' + (hasEnemy ? ' attack' : '');
+        cell.appendChild(hint);
+      }
+
+      // Selected highlight
+      if (G.selected && G.selected.r === r && G.selected.c === c) {
+        const piece = cell.querySelector('.piece');
+        if (piece) piece.classList.add('selected');
+      }
+
+      if (interactive) {
+        cell.addEventListener('click', () => onCellClick(r, c));
+      }
+
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function drawBoardLines(svg) {
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox', '0 0 500 1200');
+  svg.setAttribute('preserveAspectRatio', 'none');
+
+  // Cell center coordinates: padding 2%, so usable area = 96%
+  // Grid: 5 cols, 12 rows. cellW = (500 * 0.96)/5 = 96, cellH = (1200 * 0.96)/12 = 96
+  // Offset = 2% = 10/24 in each dir
+  const padX = 10, padY = 24;
+  const cellW = (500 - 2*padX) / 5;
+  const cellH = (1200 - 2*padY) / 12;
+  const cx = c => padX + cellW * (c + 0.5);
+  const cy = r => padY + cellH * (r + 0.5);
+
+  // Helper to add line
+  const addLine = (r1, c1, r2, c2, isRail) => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', cx(c1)); line.setAttribute('y1', cy(r1));
+    line.setAttribute('x2', cx(c2)); line.setAttribute('y2', cy(r2));
+    line.setAttribute('stroke', isRail ? '#8b0000' : '#5a2a1a');
+    line.setAttribute('stroke-width', isRail ? 5 : 1.5);
+    if (isRail) {
+      line.setAttribute('stroke-dasharray', '3 4');
+    }
+    svg.appendChild(line);
+    if (isRail) {
+      // Add second line for double-track look
+      const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line2.setAttribute('x1', cx(c1)); line2.setAttribute('y1', cy(r1));
+      line2.setAttribute('x2', cx(c2)); line2.setAttribute('y2', cy(r2));
+      line2.setAttribute('stroke', '#fff5e1');
+      line2.setAttribute('stroke-width', 1.5);
+      svg.appendChild(line2);
+    }
+  };
+
+  // Track drawn edges
+  const drawn = new Set();
+  const key = (r1,c1,r2,c2) => {
+    const a = r1*5+c1, b = r2*5+c2;
+    return a < b ? a+'-'+b : b+'-'+a;
+  };
+
+  // For each cell, draw connections to neighbors
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const neighbors = getRoadNeighbors(r, c);
+      for (const [nr, nc] of neighbors) {
+        const k = key(r, c, nr, nc);
+        if (drawn.has(k)) continue;
+        drawn.add(k);
+        const isRail = isRailwayConnected(r, c, nr, nc);
+        addLine(r, c, nr, nc, isRail);
+      }
+    }
+  }
+
+  // Add 山界 markers in middle
+  const mid1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  mid1.setAttribute('x', cx(1)); mid1.setAttribute('y', (cy(5)+cy(6))/2);
+  mid1.setAttribute('text-anchor', 'middle'); mid1.setAttribute('dominant-baseline', 'middle');
+  mid1.setAttribute('fill', '#8b0000'); mid1.setAttribute('font-size', '24'); mid1.setAttribute('font-weight','800');
+  mid1.textContent = '山';
+  svg.appendChild(mid1);
+  const mid2 = mid1.cloneNode(true);
+  mid2.setAttribute('x', cx(3));
+  svg.appendChild(mid2);
+}
+
+// ============== SETUP PHASE ==============
+let setupPool = {}; // type -> remaining count
+
+function startSetup() {
+  G.phase = 'setup';
+  G.board = newBoard();
+  G.selected = null;
+  G.legalMoves = [];
+  G.poolPiece = null;
+  // Initialize pool
+  setupPool = {};
+  for (const [type, def] of Object.entries(PIECE_DEFS)) {
+    setupPool[type] = def.count;
+  }
+  document.getElementById('menu').classList.add('hidden-screen');
+  document.getElementById('game').classList.add('hidden-screen');
+  document.getElementById('setup').classList.remove('hidden-screen');
+  renderBoard('boardGrid', 'boardSvg', false);
+  bindSetupClicks();
+  renderPool();
+}
+
+function bindSetupClicks() {
+  const grid = document.getElementById('boardGrid');
+  grid.querySelectorAll('.cell').forEach(cell => {
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    cell.addEventListener('click', () => onSetupCellClick(r, c));
+  });
+}
+
+function renderPool() {
+  const pool = document.getElementById('setupPool');
+  pool.innerHTML = '';
+  for (const [type, def] of Object.entries(PIECE_DEFS)) {
+    const remaining = setupPool[type];
+    const div = document.createElement('div');
+    div.className = 'pool-piece';
+    if (remaining === 0) div.classList.add('depleted');
+    if (G.poolPiece === type) div.classList.add('selected');
+    div.textContent = def.name;
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = remaining;
+    div.appendChild(count);
+    div.addEventListener('click', () => {
+      if (setupPool[type] === 0) return;
+      G.poolPiece = G.poolPiece === type ? null : type;
+      renderPool();
+    });
+    pool.appendChild(div);
+  }
+  // Update start button
+  const total = Object.values(setupPool).reduce((a,b)=>a+b, 0);
+  document.getElementById('btnStartGame').disabled = total !== 0;
+}
+
+function onSetupCellClick(r, c) {
+  // Only human side: rows 6-11
+  if (r < 6) return;
+  const ct = cellType(r, c);
+  if (ct === 'camp') return;
+
+  // If cell has a piece, remove it
+  if (G.board[r][c]) {
+    const p = G.board[r][c];
+    setupPool[p.type]++;
+    G.board[r][c] = null;
+    renderBoard('boardGrid', 'boardSvg', false);
+    bindSetupClicks();
+    renderPool();
+    return;
+  }
+
+  // Need a piece selected
+  if (!G.poolPiece) return;
+  // Check constraints
+  if (!validSetupPlacement(G.poolPiece, r, c)) {
+    flashMessage('此處不可放置 ' + PIECE_DEFS[G.poolPiece].name);
+    return;
+  }
+
+  G.board[r][c] = makePiece(G.poolPiece, HUMAN);
+  setupPool[G.poolPiece]--;
+  if (setupPool[G.poolPiece] === 0) G.poolPiece = null;
+  renderBoard('boardGrid', 'boardSvg', false);
+  bindSetupClicks();
+  renderPool();
+}
+
+function validSetupPlacement(type, r, c) {
+  const ct = cellType(r, c);
+  // 行營不可放棋
+  if (ct === 'camp') return false;
+  // 軍旗只能放大本營
+  if (type === 'FLAG') return ct === 'hq';
+  // 大本營可以放任何非軍旗棋子（例如地雷保護旗）
+  // 地雷只能放後兩排（row 10–11，含大本營）
+  if (type === 'MINE' && r < 10) return false;
+  // 炸彈不能放前線（玩家前線 = row 6）
+  if (type === 'BOMB' && r === 6) return false;
+  return true;
+}
+
+function flashMessage(msg) {
+  const hint = document.getElementById('setupHint');
+  const original = hint.textContent;
+  hint.textContent = msg;
+  hint.style.color = '#8b0000';
+  setTimeout(() => { hint.textContent = original; hint.style.color = ''; }, 1600);
+}
+
+function generateRandomLayout(side) {
+  // Returns layout: {[r,c]: pieceType} for the side
+  const rowStart = side === HUMAN ? 6 : 0;
+  const rowEnd = side === HUMAN ? 11 : 5;
+  const backRows = side === HUMAN ? [10, 11] : [0, 1];
+  const frontRow = side === HUMAN ? 6 : 5;
+  const hqRow = side === HUMAN ? 11 : 0;
+
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const layout = {};
+    const cells = [];
+    for (let r = rowStart; r <= rowEnd; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (cellType(r, c) !== 'camp') cells.push([r, c]);
+      }
+    }
+    const remaining = {};
+    for (const [t, d] of Object.entries(PIECE_DEFS)) remaining[t] = d.count;
+
+    // Place FLAG in random HQ
+    const hqCells = cells.filter(([r,c]) => cellType(r,c)==='hq');
+    const flagAt = hqCells[Math.floor(Math.random()*hqCells.length)];
+    layout[flagAt.join(',')] = 'FLAG';
+    remaining['FLAG']--;
+
+    // Place mines in back 2 rows (excluding HQ chosen for flag, but other HQ could also have a piece)
+    const mineCandidates = cells.filter(([r,c]) => backRows.includes(r) && !layout[[r,c].join(',')] && cellType(r,c) !== 'hq');
+    shuffle(mineCandidates);
+    while (remaining['MINE'] > 0 && mineCandidates.length > 0) {
+      const cell = mineCandidates.pop();
+      layout[cell.join(',')] = 'MINE';
+      remaining['MINE']--;
+    }
+    if (remaining['MINE'] > 0) continue;
+
+    // Place bombs (not in front row)
+    const bombCandidates = cells.filter(([r,c]) => r !== frontRow && !layout[[r,c].join(',')]);
+    shuffle(bombCandidates);
+    while (remaining['BOMB'] > 0 && bombCandidates.length > 0) {
+      const cell = bombCandidates.pop();
+      layout[cell.join(',')] = 'BOMB';
+      remaining['BOMB']--;
+    }
+    if (remaining['BOMB'] > 0) continue;
+
+    // Place rest randomly
+    const restCells = cells.filter(([r,c]) => !layout[[r,c].join(',')]);
+    const restPieces = [];
+    for (const [t, n] of Object.entries(remaining)) {
+      for (let i = 0; i < n; i++) restPieces.push(t);
+    }
+    shuffle(restPieces);
+    shuffle(restCells);
+    if (restCells.length !== restPieces.length) continue;
+    for (let i = 0; i < restCells.length; i++) {
+      layout[restCells[i].join(',')] = restPieces[i];
+    }
+
+    // Validity check: should have all 25 pieces placed
+    return layout;
+  }
+  return null;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+document.getElementById('btnRandom').addEventListener('click', () => {
+  const layout = generateRandomLayout(HUMAN);
+  if (!layout) return;
+  // Clear board for human side
+  for (let r = 6; r <= 11; r++) for (let c = 0; c < 5; c++) G.board[r][c] = null;
+  // Reset pool
+  for (const t in setupPool) setupPool[t] = PIECE_DEFS[t].count;
+  // Apply layout
+  for (const [key, type] of Object.entries(layout)) {
+    const [r, c] = key.split(',').map(Number);
+    G.board[r][c] = makePiece(type, HUMAN);
+    setupPool[type]--;
+  }
+  G.poolPiece = null;
+  renderBoard('boardGrid', 'boardSvg', false);
+  bindSetupClicks();
+  renderPool();
+});
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  for (let r = 6; r <= 11; r++) for (let c = 0; c < 5; c++) G.board[r][c] = null;
+  for (const t in setupPool) setupPool[t] = PIECE_DEFS[t].count;
+  G.poolPiece = null;
+  renderBoard('boardGrid', 'boardSvg', false);
+  bindSetupClicks();
+  renderPool();
+});
+
+document.getElementById('btnStartGame').addEventListener('click', () => {
+  // Generate AI layout
+  const aiLayout = generateRandomLayout(AI);
+  if (!aiLayout) { alert('電腦佈陣失敗，請重試'); return; }
+  for (const [key, type] of Object.entries(aiLayout)) {
+    const [r, c] = key.split(',').map(Number);
+    G.board[r][c] = makePiece(type, AI);
+  }
+  startGame();
+});
+
+// ============== GAME PHASE ==============
+function startGame() {
+  G.phase = 'play';
+  G.turn = HUMAN;
+  G.selected = null;
+  G.legalMoves = [];
+  G.moveHistory = [];
+  G.noProgressTurns = 0;
+  initAiKnowledge();
+
+  document.getElementById('setup').classList.add('hidden-screen');
+  document.getElementById('game').classList.remove('hidden-screen');
+  const levelLabel = {easy: '簡單', hard: '困難', cold: '冷酷'}[G.level];
+  document.getElementById('diffLabel').textContent = levelLabel;
+  document.getElementById('log').innerHTML = '';
+  addLog('開戰！輪到玩家行動', 'player-move');
+  renderGame();
+}
+
+function renderGame() {
+  renderBoard('gameBoardGrid', 'gameBoardSvg', true);
+  const ind = document.getElementById('turnInd');
+  if (G.turn === HUMAN) { ind.textContent = '玩家行動'; ind.className = 'turn-indicator player'; }
+  else { ind.textContent = '電腦思考中…'; ind.className = 'turn-indicator ai'; }
+}
+
+function onCellClick(r, c) {
+  if (G.phase !== 'play' || G.turn !== HUMAN) return;
+  const p = G.board[r][c];
+
+  // If a piece is selected and this is a legal move
+  if (G.selected && G.legalMoves.some(m => m[0]===r && m[1]===c)) {
+    makeMove(G.selected.r, G.selected.c, r, c);
+    return;
+  }
+
+  // Select own piece
+  if (p && p.side === HUMAN) {
+    const moves = getLegalMoves(r, c);
+    if (moves.length > 0) {
+      G.selected = { r, c };
+      G.legalMoves = moves;
+    } else {
+      G.selected = null;
+      G.legalMoves = [];
+    }
+    renderGame();
+    return;
+  }
+
+  // Deselect
+  G.selected = null;
+  G.legalMoves = [];
+  renderGame();
+}
+
+function makeMove(r1, c1, r2, c2) {
+  const piece = G.board[r1][c1];
+  const target = G.board[r2][c2];
+  let captureInfo = null;
+  let progress = false;
+
+  if (target) {
+    // Combat
+    const result = resolveCombat(piece, target);
+    progress = true;
+    captureInfo = { attacker: piece, defender: target, result };
+
+    // Reveal both
+    piece.revealed = true;
+    target.revealed = true;
+
+    if (result === 'attacker') {
+      G.board[r2][c2] = piece;
+      G.board[r1][c1] = null;
+      logCombat(piece, target, 'win');
+    } else if (result === 'defender') {
+      G.board[r1][c1] = null;
+      logCombat(piece, target, 'lose');
+    } else {
+      G.board[r1][c1] = null;
+      G.board[r2][c2] = null;
+      logCombat(piece, target, 'both');
+    }
+
+    // Update AI knowledge if combat involved
+    if (piece.side === AI) updateAiKnowledgeFromCombat(piece, target, result);
+    if (target.side === AI) updateAiKnowledgeFromCombat(target, piece, result === 'attacker' ? 'lose' : result === 'defender' ? 'win' : 'both');
+
+    // Check win
+    if (target.type === 'FLAG') {
+      endGame(piece.side === HUMAN ? 'win' : 'lose');
+      return;
+    }
+  } else {
+    // Simple move
+    G.board[r2][c2] = piece;
+    G.board[r1][c1] = null;
+    piece.moved = true;
+
+    // Log movement for AI inference
+    if (piece.side === HUMAN) {
+      const distance = Math.abs(r2-r1) + Math.abs(c2-c1);
+      if (distance > 1 && isRailway(r1,c1) && isRailway(r2,c2)) {
+        // Moved on railway > 1 step - definitely not mine/flag
+        G.aiKnowledge[r2+','+c2].notMine = true;
+        G.aiKnowledge[r2+','+c2].notFlag = true;
+        // Check if moved with turn (engineer indicator)
+        if (r1 !== r2 && c1 !== c2) {
+          G.aiKnowledge[r2+','+c2].likelyEngineer = true;
+        }
+      } else {
+        G.aiKnowledge[r2+','+c2] = G.aiKnowledge[r1+','+c1];
+        G.aiKnowledge[r2+','+c2].notMine = true;
+        G.aiKnowledge[r2+','+c2].notFlag = true;
+      }
+      delete G.aiKnowledge[r1+','+c1];
+    }
+
+    addLog((piece.side===HUMAN?'玩家':'電腦') + ' 移動 ' + (piece.side===HUMAN?piece.name:'？') , piece.side===HUMAN?'player-move':'ai-move');
+  }
+
+  G.moveHistory.push({from:[r1,c1], to:[r2,c2], side: piece.side, captured: !!target});
+  if (!progress) G.noProgressTurns++;
+  else G.noProgressTurns = 0;
+
+  G.selected = null;
+  G.legalMoves = [];
+
+  // Switch turn
+  G.turn = G.turn === HUMAN ? AI : HUMAN;
+
+  // Check stalemate (50 moves without progress = draw)
+  if (G.noProgressTurns >= 60) {
+    endGame('draw');
+    return;
+  }
+
+  // Check if next side has any legal moves
+  const sideMoves = getAllMovesForSide(G.turn);
+  if (sideMoves.length === 0) {
+    endGame(G.turn === HUMAN ? 'lose' : 'win');
+    return;
+  }
+
+  renderGame();
+
+  if (G.turn === AI) {
+    setTimeout(aiTurn, 700);
+  }
+}
+
+function logCombat(attacker, defender, outcome) {
+  const aName = attacker.side === HUMAN ? attacker.name : '電腦' + attacker.name;
+  const dName = defender.side === HUMAN ? defender.name : '電腦' + defender.name;
+  let txt;
+  if (outcome === 'win') txt = aName + ' 擊敗 ' + dName;
+  else if (outcome === 'lose') txt = aName + ' 攻擊 ' + dName + ' 失敗';
+  else txt = aName + ' 與 ' + dName + ' 同歸於盡';
+  addLog(txt, 'combat');
+}
+
+function addLog(msg, cls) {
+  const log = document.getElementById('log');
+  const p = document.createElement('p');
+  if (cls) p.className = cls;
+  p.textContent = '· ' + msg;
+  log.appendChild(p);
+  log.scrollTop = log.scrollHeight;
+}
+
+function getAllMovesForSide(side) {
+  const moves = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const p = G.board[r][c];
+      if (p && p.side === side) {
+        const m = getLegalMoves(r, c);
+        for (const [nr, nc] of m) moves.push({from:[r,c], to:[nr,nc]});
+      }
+    }
+  }
+  return moves;
+}
+
+// ============== AI ==============
+function initAiKnowledge() {
+  // For each human piece position, store what we know
+  G.aiKnowledge = {};
+  for (let r = 6; r <= 11; r++) {
+    for (let c = 0; c < 5; c++) {
+      if (G.board[r][c]) {
+        G.aiKnowledge[r+','+c] = {
+          minRank: -100,         // minimum known rank
+          maxRank: 100,
+          notMine: false,
+          notFlag: false,
+          likelyEngineer: false,
+          revealed: null,        // if known exactly
+          movedFromRow: r,
+        };
+        // Initial constraints based on placement
+        // Pieces in back row that haven't moved could be flag/mine
+        // Pieces in front row are not mines (constraint)
+        if (r === 6) {
+          G.aiKnowledge[r+','+c].notMine = true;
+          // could be anything else
+        }
+        if (r < 10) {
+          G.aiKnowledge[r+','+c].notMine = true; // mines only in rows 10-11
+        }
+        if (cellType(r,c) !== 'hq') {
+          G.aiKnowledge[r+','+c].notFlag = true;
+        }
+      }
+    }
+  }
+}
+
+function updateAiKnowledgeFromCombat(aiPiece, humanPiece, resultForAi) {
+  // resultForAi: 'win' means AI won; 'lose' means AI lost; 'both' means tied
+  // We don't know exact piece but we now know more
+  // Note: this updates from AI's perspective using its own piece info
+}
+
+function aiTurn() {
+  if (G.phase !== 'play' || G.turn !== AI) return;
+  const moves = getAllMovesForSide(AI);
+  if (moves.length === 0) {
+    endGame('win');
+    return;
+  }
+
+  let chosen;
+  if (G.level === 'easy') chosen = aiEasy(moves);
+  else if (G.level === 'hard') chosen = aiHard(moves);
+  else chosen = aiCold(moves);
+
+  if (!chosen) chosen = moves[Math.floor(Math.random()*moves.length)];
+  makeMove(chosen.from[0], chosen.from[1], chosen.to[0], chosen.to[1]);
+}
+
+function aiEasy(moves) {
+  // Mostly random, but prefer obvious safe captures
+  const captures = moves.filter(m => {
+    const t = G.board[m.to[0]][m.to[1]];
+    return t && t.revealed;
+  });
+  if (captures.length > 0 && Math.random() < 0.6) {
+    // Pick a winning capture
+    const winning = captures.filter(m => {
+      const att = G.board[m.from[0]][m.from[1]];
+      const def = G.board[m.to[0]][m.to[1]];
+      return resolveCombat(att, def) === 'attacker';
+    });
+    if (winning.length > 0) return winning[Math.floor(Math.random()*winning.length)];
+  }
+  return moves[Math.floor(Math.random()*moves.length)];
+}
+
+function aiHard(moves) {
+  const scored = moves.map(m => ({ m, score: scoreMove(m, 1) + Math.random()*2 }));
+  scored.sort((a,b) => b.score - a.score);
+  // Pick top with small randomness
+  const top = scored.slice(0, Math.min(3, scored.length));
+  return top[Math.floor(Math.random()*top.length)].m;
+}
+
+function aiCold(moves) {
+  // Score with deeper heuristics
+  const scored = moves.map(m => ({ m, score: scoreMove(m, 2) }));
+  scored.sort((a,b) => b.score - a.score);
+  // Slight randomness to avoid being too predictable but stay top-tier
+  if (scored.length > 1 && scored[0].score - scored[1].score < 3 && Math.random() < 0.3) {
+    return scored[1].m;
+  }
+  return scored[0].m;
+}
+
+function scoreMove(move, depth) {
+  const [r1, c1] = move.from, [r2, c2] = move.to;
+  const piece = G.board[r1][c1];
+  const target = G.board[r2][c2];
+  let score = 0;
+
+  // Movement reward: AI advancing toward human (row increasing)
+  if (r2 > r1) score += 1.5;
+  else if (r2 === r1) score += 0.2;
+  // Don't retreat unnecessarily
+  if (r2 < r1 && piece.type !== 'BOMB' && piece.type !== 'COMMANDER') score -= 0.5;
+
+  // Center control
+  if (c2 === 2) score += 0.3;
+
+  // Combat evaluation
+  if (target) {
+    score += evaluateCombat(piece, target, r2, c2, depth);
+  } else {
+    // Approach revealed enemies if profitable
+    const nearbyEnemies = getNearbyEnemies(r2, c2, 2);
+    for (const [er, ec] of nearbyEnemies) {
+      const enemy = G.board[er][ec];
+      if (enemy && enemy.revealed) {
+        if (piece.rank > enemy.rank && enemy.type !== 'BOMB' && enemy.type !== 'MINE') {
+          score += 2;
+        }
+      }
+    }
+  }
+
+  // Penalize moving valuable pieces into known threats
+  if (piece.val > 30) {
+    const threats = getThreatLevel(r2, c2, piece);
+    if (threats > 0) score -= threats * 2;
+  }
+
+  // Defend flag - keep some pieces near HQ
+  const flagPos = findOwnFlag(AI);
+  if (flagPos) {
+    const distNow = Math.abs(flagPos[0]-r1) + Math.abs(flagPos[1]-c1);
+    const distAfter = Math.abs(flagPos[0]-r2) + Math.abs(flagPos[1]-c2);
+    if (distNow <= 2 && distAfter > distNow && countFlagDefenders() <= 2) {
+      score -= 3;
+    }
+  }
+
+  // Bonus for going through 行營 (safe spots)
+  if (cellType(r2, c2) === 'camp') score += 0.5;
+
+  // Engineer should hunt mines (back row pieces likely)
+  if (piece.type === 'ENGINEER' && r2 >= 9) score += 0.5;
+
+  // Strong pieces should advance
+  if (piece.rank >= 7) {
+    score += (r2 - 0) * 0.3; // bonus for being deeper
+  }
+
+  return score;
+}
+
+function evaluateCombat(piece, target, r2, c2, depth) {
+  // Camp cannot attack
+  if (cellType(r2, c2) === 'camp') return -100;
+
+  let score = 0;
+  if (target.revealed || target.side === piece.side) {
+    // Known piece
+    const result = resolveCombat(piece, target);
+    if (result === 'attacker') score += target.val * 1.5 - piece.val * 0.1;
+    else if (result === 'defender') score -= piece.val * 1.2;
+    else score += target.val - piece.val * 0.5;
+  } else {
+    // Unknown human piece - use knowledge
+    const k = G.aiKnowledge[r2+','+c2] || {};
+
+    // Flag capture would win
+    if (cellType(r2,c2) === 'hq' && !k.notFlag) {
+      score += 200; // hugely valuable to attack HQ
+    }
+
+    // Likely mine? (back rows, unmoved)
+    const likelyMine = !k.notMine && (r2 >= 10) && !k.likelyEngineer;
+    if (likelyMine) {
+      if (piece.type === 'ENGINEER') score += 18; // beat mine
+      else if (piece.type === 'BOMB') score += 5; // wastes a bomb
+      else if (piece.val > 25) score -= 25; // bad trade!
+      else score -= piece.val * 0.5;
+    } else {
+      // Average unknown piece value ~15
+      // For COLD difficulty, use better inference
+      const estimatedRank = estimateUnknownRank(r2, c2);
+      if (piece.rank > estimatedRank) {
+        score += 10;
+      } else if (piece.rank < estimatedRank) {
+        score -= piece.val * 0.4;
+      } else {
+        score += 3;
+      }
+
+      // Bombs are risky for high-value pieces
+      if (piece.val > 30) {
+        // human likely placed bombs in mid-back
+        if (r2 >= 7 && r2 <= 10) score -= 8;
+      }
+    }
+
+    // Bomb on bomb run
+    if (piece.type === 'BOMB') {
+      // Bombs should target high-value spots
+      score += 12;
+      if (r2 >= 10) score += 5; // back row likely has flag
+    }
+  }
+  return score;
+}
+
+function estimateUnknownRank(r, c) {
+  // Heuristic: pieces in back rows that haven't moved are likely defensive (mines/flag/low)
+  // Pieces in front rows are likely mid-tier
+  const k = G.aiKnowledge[r+','+c];
+  if (!k) return 4; // average
+  if (k.likelyEngineer) return 1;
+  if (r === 6) return 4; // front row
+  if (r === 7) return 5;
+  if (r === 8) return 5;
+  return 4;
+}
+
+function getNearbyEnemies(r, c, dist) {
+  const result = [];
+  for (let dr = -dist; dr <= dist; dr++) {
+    for (let dc = -dist; dc <= dist; dc++) {
+      if (Math.abs(dr)+Math.abs(dc) > dist) continue;
+      const nr = r+dr, nc = c+dc;
+      if (nr<0||nr>11||nc<0||nc>4) continue;
+      const p = G.board[nr][nc];
+      if (p && p.side === HUMAN) result.push([nr, nc]);
+    }
+  }
+  return result;
+}
+
+function getThreatLevel(r, c, piece) {
+  // How threatened is this position for AI piece
+  let threat = 0;
+  for (let er = 0; er < 12; er++) {
+    for (let ec = 0; ec < 5; ec++) {
+      const enemy = G.board[er][ec];
+      if (!enemy || enemy.side !== HUMAN) continue;
+      // Check if enemy could attack this position next turn
+      const enemyMoves = getLegalMoves(er, ec);
+      if (enemyMoves.some(m => m[0]===r && m[1]===c)) {
+        if (enemy.revealed) {
+          if (enemy.rank > piece.rank || enemy.type === 'BOMB' || enemy.type === 'MINE') threat += 3;
+          else threat += 1;
+        } else {
+          threat += 1.5; // unknown threat
+        }
+      }
+    }
+  }
+  return threat;
+}
+
+function findOwnFlag(side) {
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 5; c++) {
+    const p = G.board[r][c];
+    if (p && p.side === side && p.type === 'FLAG') return [r, c];
+  }
+  return null;
+}
+
+function countFlagDefenders() {
+  const flag = findOwnFlag(AI);
+  if (!flag) return 0;
+  let count = 0;
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 5; c++) {
+    const p = G.board[r][c];
+    if (p && p.side === AI && p.type !== 'FLAG' && p.type !== 'MINE') {
+      if (Math.abs(r-flag[0])+Math.abs(c-flag[1]) <= 2) count++;
+    }
+  }
+  return count;
+}
+
+// ============== END GAME ==============
+function endGame(result) {
+  G.phase = 'end';
+  // Reveal all pieces
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 5; c++) {
+    if (G.board[r][c]) G.board[r][c].revealed = true;
+  }
+  renderGame();
+
+  const modal = document.getElementById('endModal');
+  const content = document.getElementById('endContent');
+  const title = document.getElementById('endTitle');
+  const msg = document.getElementById('endMsg');
+
+  content.classList.remove('win','lose');
+  if (result === 'win') {
+    content.classList.add('win');
+    title.textContent = '🏆 大獲全勝';
+    msg.textContent = '你奪下了敵方軍旗，凱旋而歸！';
+  } else if (result === 'lose') {
+    content.classList.add('lose');
+    title.textContent = '◆ 兵敗如山倒';
+    msg.textContent = '電腦攻陷了你的大本營。再戰一回？';
+  } else {
+    title.textContent = '◇ 雙方僵持';
+    msg.textContent = '六十回合無進展，本局和棋。';
+  }
+  modal.classList.remove('hidden-screen');
+}
+
+function newGame() {
+  document.getElementById('endModal').classList.add('hidden-screen');
+  document.getElementById('game').classList.add('hidden-screen');
+  document.getElementById('setup').classList.add('hidden-screen');
+  document.getElementById('menu').classList.remove('hidden-screen');
+  G.phase = 'menu';
+  G.board = null;
+}
+
+// ============== EVENT BINDINGS ==============
+document.querySelectorAll('#menu button[data-level]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    G.level = btn.dataset.level;
+    startSetup();
+  });
+});
+
+document.getElementById('btnSurrender').addEventListener('click', () => {
+  if (confirm('確定要投降嗎？')) endGame('lose');
+});
+document.getElementById('btnNewGame').addEventListener('click', () => {
+  if (confirm('結束本局，回到主畫面？')) newGame();
+});
+
+// Init
+G.board = newBoard();
+</script>
+
+</body>
+</html>
